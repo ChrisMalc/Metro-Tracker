@@ -516,7 +516,6 @@
       const hasAlert=groupHasAlert(group.codes);
       const allTrains=getGroupTrains(group.codes);
       const availableLines=getGroupLines(group.codes);
-      ensureLineSelections(gk, availableLines);
       const sel=lineSelections[gk]||new Set();
       const sortedLines=sortLines(availableLines);
 
