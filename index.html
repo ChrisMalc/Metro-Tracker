@@ -39,7 +39,6 @@
 
     .last-update { color: #6b7264; font-size: 0.8rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.4rem; }
 
-    /* Alerts banner */
     .alerts-banner {
       background: #fef8ee; border: 1px solid #f5d9a8;
       border-radius: 0.7rem; padding: 0.7rem 0.85rem; margin-bottom: 0.85rem;
@@ -56,7 +55,6 @@
     .alert-item:first-child { border-top: none; padding-top: 0; }
     .alert-lines { font-weight: 600; color: #92400e; }
 
-    /* Station cards */
     .card {
       background: #ffffff; border: 1px solid #ddd8cf;
       border-radius: 0.85rem; padding: 1rem; margin-bottom: 0.85rem;
@@ -74,6 +72,15 @@
     .collapse-arrow.collapsed { transform: rotate(-90deg); }
     .station-body { margin-top: 0.4rem; }
     .station-body.hidden { display: none; }
+
+    .line-filters { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0.35rem 0 0.5rem 0; }
+    .line-filter-btn {
+      padding: 0.22rem 0.6rem; font-size: 0.7rem; font-weight: 600;
+      border: 1.5px solid #d1cdc4; border-radius: 999px;
+      background: #fafaf7; color: #6b7264; cursor: pointer;
+      transition: all 0.15s ease; line-height: 1.3;
+    }
+    .line-filter-btn:hover { border-color: #a09a8e; }
 
     .direction-group { margin-bottom: 0.6rem; }
     .direction-group:last-child { margin-bottom: 0; }
@@ -167,16 +174,6 @@
     .btn-info-secondary:hover { background: #f4f1eb; }
 
     .empty-settings { text-align: center; padding: 2rem 0; color: #8a8477; }
-
-    .line-filters { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0.3rem 0 0.15rem 0; }
-    .line-filter-btn {
-      padding: 0.2rem 0.55rem; font-size: 0.7rem; font-weight: 600;
-      border: 1.5px solid #d1cdc4; border-radius: 999px;
-      background: #fafaf7; color: #6b7264; cursor: pointer;
-      transition: all 0.15s ease; line-height: 1.3;
-    }
-    .line-filter-btn:hover { border-color: #a09a8e; }
-
     .spin { animation: spin 1s linear infinite; }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
   </style>
@@ -188,75 +185,100 @@
     const allStations = {'A01':'Metro Center','A02':'Farragut North','A03':'Dupont Circle','A04':'Woodley Park-Zoo/Adams Morgan','A05':'Cleveland Park','A06':'Van Ness-UDC','A07':'Tenleytown-AU','A08':'Friendship Heights','A09':'Bethesda','A10':'Medical Center','A11':'Grosvenor-Strathmore','A12':'North Bethesda','A13':'Twinbrook','A14':'Rockville','A15':'Shady Grove','B01':'Gallery Pl-Chinatown','B02':'Judiciary Square','B03':'Union Station','B04':'Rhode Island Ave-Brentwood','B05':'Brookland-CUA','B06':'Fort Totten','B07':'Takoma','B08':'Silver Spring','B09':'Forest Glen','B10':'Wheaton','B11':'Glenmont','B35':'NoMa-Gallaudet U','C01':'Metro Center','C02':'McPherson Square','C03':'Farragut West','C04':'Foggy Bottom-GWU','C05':'Rosslyn','C06':'Arlington Cemetery','C07':'Pentagon','C08':'Pentagon City','C09':'Crystal City','C10':'Ronald Reagan Washington National Airport','C11':'Potomac Yard','C12':'Braddock Road','C13':'King St-Old Town','C14':'Eisenhower Avenue','C15':'Huntington','D01':'Federal Triangle','D02':'Smithsonian','D03':"L'Enfant Plaza",'D04':'Federal Center SW','D05':'Capitol South','D06':'Eastern Market','D07':'Potomac Ave','D08':'Stadium-Armory','D09':'Minnesota Ave','D10':'Deanwood','D11':'Cheverly','D12':'Landover','D13':'New Carrollton','E01':'Mt Vernon Sq 7th St-Convention Center','E02':'Shaw-Howard U','E03':'U Street/African-Amer Civil War Memorial/Cardozo','E04':'Columbia Heights','E05':'Georgia Ave-Petworth','E06':'Fort Totten','E07':'West Hyattsville','E08':'Hyattsville Crossing','E09':'College Park-U of Md','E10':'Greenbelt','F01':'Gallery Pl-Chinatown','F02':'Archives-Navy Memorial-Penn Quarter','F03':"L'Enfant Plaza",'F04':'Waterfront','F05':'Navy Yard-Ballpark','F06':'Anacostia','F07':'Congress Heights','F08':'Southern Avenue','F09':'Naylor Road','F10':'Suitland','F11':'Branch Ave','G01':'Benning Road','G02':'Capitol Heights','G03':'Addison Road-Seat Pleasant','G04':'Morgan Boulevard','G05':'Downtown Largo','J02':'Van Dorn Street','J03':'Franconia-Springfield','K01':'Court House','K02':'Clarendon','K03':'Virginia Square-GMU','K04':'Ballston-MU','K05':'East Falls Church','K06':'West Falls Church','K07':'Dunn Loring-Merrifield','K08':'Vienna/Fairfax-GMU','N01':'McLean','N02':'Tysons','N03':'Greensboro','N04':'Spring Hill','N06':'Wiehle-Reston East','N07':'Reston Town Center','N08':'Herndon','N09':'Innovation Center','N10':'Washington Dulles International Airport','N11':'Loudoun Gateway','N12':'Ashburn'};
     const pairedStations = {'A01':'C01','C01':'A01','B01':'F01','F01':'B01','B06':'E06','E06':'B06','D03':'F03','F03':'D03'};
 
-    let stations=[], predictions={}, loading=false, error='', showSettings=false, stationInput='', lastUpdate=null, showPairSuggestion=null, refreshInterval=null;
-    let lineFilters = {};
-    let collapsedStations = new Set();
-    let railAlerts = [];
-    let stationLineMap = {};  // stationCode -> Set of line codes, built from predictions
-
-    // Static fallback: which lines serve each station code prefix
-    const stationLinesFallback = {
-      'A':'RD','B':'RD','C':'BL,OR,SV','D':'BL,OR,SV','E':'GR,YL','F':'GR,YL',
+    // Static fallback: lines by station code prefix
+    const prefixLines = {
+      'A':'RD','B':'RD','C':'BL,OR,SV','D':'BL,OR,SV,YL','E':'GR,YL','F':'GR,YL',
       'G':'BL,SV','J':'BL,YL','K':'OR,SV','N':'SV'
     };
 
-    function getLinesForStation(code){
-      // Use live predictions data if available
-      if(stationLineMap[code] && stationLineMap[code].size > 0) return stationLineMap[code];
-      // Fallback to static mapping by prefix
-      const prefix = code.charAt(0);
-      const fallback = stationLinesFallback[prefix];
-      return fallback ? new Set(fallback.split(',')) : new Set();
+    let stations=[], predictions={}, loading=false, error='', showSettings=false, stationInput='', lastUpdate=null, refreshInterval=null;
+    let collapsedStations = new Set();  // keyed by groupKey
+    let lineSelections = {};            // groupKey -> Set of selected lines
+    let railAlerts = [];
+
+    // ===== Display Groups: merge paired stations into single cards =====
+    function getDisplayGroups(){
+      const groups=[], used=new Set();
+      for(const c of stations){
+        if(used.has(c)) continue;
+        used.add(c);
+        const pair=pairedStations[c];
+        if(pair && stations.includes(pair)){
+          used.add(pair);
+          groups.push({codes:[c,pair], name:allStations[c]});
+        } else {
+          groups.push({codes:[c], name:allStations[c]});
+        }
+      }
+      return groups;
     }
 
-    function getAllUserLines(){
-      const lines = new Set();
-      for(const c of stations){
-        for(const l of getLinesForStation(c)) lines.add(l);
+    function getGroupKey(codes){ return codes.slice().sort().join('+'); }
+
+    // Get all trains across all codes in a display group
+    function getGroupTrains(codes){
+      let all=[];
+      for(const c of codes){
+        const trains=predictions[c]||[];
+        // Tag each train with its source location for unique direction grouping
+        for(const t of trains) all.push({...t, _src:c});
+      }
+      return all;
+    }
+
+    // Get all unique lines for a display group (from live data + fallback)
+    function getGroupLines(codes){
+      const lines=new Set();
+      // From live predictions
+      for(const c of codes){
+        for(const t of (predictions[c]||[])){
+          if(t.Line && t.Line.length===2 && !isSpecialTrain(t)) lines.add(t.Line);
+        }
+      }
+      // Fallback if no predictions yet
+      if(lines.size===0){
+        for(const c of codes){
+          const pf=prefixLines[c.charAt(0)];
+          if(pf) pf.split(',').forEach(l=>lines.add(l));
+        }
       }
       return lines;
     }
 
-    function parseAlertLines(alert){
-      return (alert.LinesAffected||'').split(/;[\s]?/).filter(l=>l.trim()).map(l=>l.trim());
-    }
-
-    function getRelevantAlerts(){
-      const userLines = getAllUserLines();
-      return railAlerts.filter(a=>{
-        const aLines = parseAlertLines(a);
-        return aLines.some(l=>userLines.has(l));
-      });
-    }
-
-    function stationHasAlert(code){
-      const sLines = getLinesForStation(code);
-      if(sLines.size === 0) return false;
-      return railAlerts.some(a=>{
-        const aLines = parseAlertLines(a);
-        return aLines.some(l=>sLines.has(l));
-      });
-    }
-
-    function buildStationLineMap(){
-      stationLineMap = {};
-      for(const c of stations){
-        const trains = predictions[c];
-        if(!trains) continue;
-        const lines = new Set();
-        for(const t of trains){
-          if(t.Line && t.Line.length===2) lines.add(t.Line);
+    // Ensure line selections exist for a group, defaulting all to selected
+    function ensureLineSelections(groupKey, availableLines){
+      if(!lineSelections[groupKey]){
+        lineSelections[groupKey] = new Set(availableLines);
+      } else {
+        // Add any new lines as selected
+        for(const l of availableLines){
+          if(!lineSelections[groupKey].has(l)){
+            // Only auto-add if this is a genuinely new line
+            lineSelections[groupKey].add(l);
+          }
         }
-        stationLineMap[c] = lines;
       }
     }
 
-    // --- Init ---
+    function toggleLineSelection(groupKey, line){
+      if(!lineSelections[groupKey]) return;
+      const sel=lineSelections[groupKey];
+      if(sel.has(line)) sel.delete(line);
+      else sel.add(line);
+      render();
+    }
+
+    // ===== Init =====
     function init(){
       const s=localStorage.getItem('metroTrackerStations');
       if(s){try{stations=JSON.parse(s)}catch(e){}}
       const c=localStorage.getItem('metroCollapsed');
       if(c){try{collapsedStations=new Set(JSON.parse(c))}catch(e){}}
+      const ls=localStorage.getItem('metroLineSelections');
+      if(ls){try{
+        const obj=JSON.parse(ls);
+        for(const k in obj) lineSelections[k]=new Set(obj[k]);
+      }catch(e){}}
       render();
       if(stations.length>0){fetchAll(); refreshInterval=setInterval(fetchAll,30000)}
     }
@@ -267,24 +289,33 @@
     function saveCollapsed(){
       collapsedStations.size>0?localStorage.setItem('metroCollapsed',JSON.stringify([...collapsedStations])):localStorage.removeItem('metroCollapsed')
     }
-
-    // --- Data fetching ---
-    async function fetchAll(){
-      await Promise.all([fetchPredictions(), fetchAlerts()]);
+    function saveLineSelections(){
+      const obj={};
+      for(const k in lineSelections) obj[k]=[...lineSelections[k]];
+      localStorage.setItem('metroLineSelections',JSON.stringify(obj));
     }
 
+    // ===== Data fetching =====
+    async function fetchAll(){ await Promise.all([fetchPredictions(), fetchAlerts()]); }
+
     async function fetchPredictions(){
-      if(!stations.length)return;
+      if(!stations.length) return;
       loading=true; error=''; predictions={}; render();
       try{
         for(const c of stations){
           const r=await fetch(`https://api.wmata.com/StationPrediction.svc/json/GetPrediction/${c}`,{headers:{'api_key':API_KEY}});
-          if(!r.ok) throw new Error(`Failed to fetch data for ${c}`);
+          if(!r.ok) throw new Error(`Failed to fetch for ${c}`);
           const d=await r.json();
           predictions[c]=d.Trains||[];
         }
         lastUpdate=new Date();
-        buildStationLineMap();
+        // Ensure line selections are populated for all display groups
+        for(const g of getDisplayGroups()){
+          const gk=getGroupKey(g.codes);
+          const lines=getGroupLines(g.codes);
+          ensureLineSelections(gk, lines);
+        }
+        saveLineSelections();
       }catch(e){error=e.message}finally{loading=false;render()}
     }
 
@@ -295,65 +326,65 @@
         const d=await r.json();
         railAlerts=(d.Incidents||[]).filter(a=>a.Description);
         render();
-      }catch(e){/* silent fail for alerts */}
+      }catch(e){/* silent */}
     }
 
-    // --- Station management ---
+    // ===== Station management =====
     function addStation(c){
       const u=c.trim().toUpperCase();
-      if(u&&allStations[u]&&!stations.includes(u)){
-        stations.push(u); saveStations(); stationInput='';
-        if(pairedStations[u]){const p=pairedStations[u]; if(!stations.includes(p)) showPairSuggestion=p}
-        render();
-        if(refreshInterval) clearInterval(refreshInterval);
-        fetchAll(); refreshInterval=setInterval(fetchAll,30000);
+      if(!u||!allStations[u]||stations.includes(u)) return;
+      stations.push(u);
+      // Auto-add paired platform
+      const pair=pairedStations[u];
+      if(pair && !stations.includes(pair)){
+        stations.push(pair);
       }
-    }
-    function addStationPair(p){
-      if(!stations.includes(p)){stations.push(p);saveStations()}
-      showPairSuggestion=null; render();
+      saveStations(); stationInput='';
+      // Initialize line selections for the new group
+      const codes=pair&&stations.includes(pair)?[u,pair]:[u];
+      const gk=getGroupKey(codes);
+      const lines=getGroupLines(codes);
+      ensureLineSelections(gk, lines);
+      saveLineSelections();
+      render();
       if(refreshInterval) clearInterval(refreshInterval);
       fetchAll(); refreshInterval=setInterval(fetchAll,30000);
     }
+
     function removeStation(c){
-      stations=stations.filter(s=>s!==c); saveStations(); delete predictions[c]; render();
+      // Also remove paired station
+      const pair=pairedStations[c];
+      stations=stations.filter(s=>s!==c&&s!==pair);
+      saveStations();
+      delete predictions[c];
+      if(pair) delete predictions[pair];
+      render();
       if(!stations.length&&refreshInterval){clearInterval(refreshInterval);refreshInterval=null}
     }
-    function toggleCollapse(c){
-      if(collapsedStations.has(c)) collapsedStations.delete(c);
-      else collapsedStations.add(c);
+
+    function toggleCollapse(gk){
+      if(collapsedStations.has(gk)) collapsedStations.delete(gk);
+      else collapsedStations.add(gk);
       saveCollapsed(); render();
     }
 
-    // --- Line helpers ---
+    // ===== Line helpers =====
     function getLineColor(l){
-      const c={'RD':'#dc2626','BL':'#2563eb','YL':'#ca8a04','OR':'#ea580c','GR':'#16a34a','SV':'#71717a'};
-      return c[l]||'#71717a';
+      return {'RD':'#dc2626','BL':'#2563eb','YL':'#ca8a04','OR':'#ea580c','GR':'#16a34a','SV':'#71717a'}[l]||'#71717a';
     }
     function getLineName(l){
-      const n={'RD':'Red','BL':'Blue','YL':'Yellow','OR':'Orange','GR':'Green','SV':'Silver'};
-      return n[l]||l;
+      return {'RD':'Red','BL':'Blue','YL':'Yellow','OR':'Orange','GR':'Green','SV':'Silver'}[l]||l;
     }
     function getLineFilterBg(l){
-      const c={'RD':'rgba(220,38,38,0.12)','BL':'rgba(37,99,235,0.12)','YL':'rgba(202,138,4,0.12)','OR':'rgba(234,88,12,0.12)','GR':'rgba(22,163,74,0.12)','SV':'rgba(113,113,122,0.12)'};
-      return c[l]||'rgba(113,113,122,0.1)';
+      return {'RD':'rgba(220,38,38,0.12)','BL':'rgba(37,99,235,0.12)','YL':'rgba(202,138,4,0.12)','OR':'rgba(234,88,12,0.12)','GR':'rgba(22,163,74,0.12)','SV':'rgba(113,113,122,0.12)'}[l]||'rgba(113,113,122,0.1)';
     }
-    function getFilterKey(sc,gk){ return sc+'-'+gk; }
-    function toggleLineFilter(sc,gk,line){
-      const key=getFilterKey(sc,gk);
-      if(!lineFilters[key]) lineFilters[key]=new Set();
-      if(lineFilters[key].has(line)) lineFilters[key].delete(line);
-      else lineFilters[key].add(line);
-      if(lineFilters[key].size===0) delete lineFilters[key];
-      render();
-    }
-    function isLineVisible(sc,gk,line){
-      const key=getFilterKey(sc,gk);
-      if(!lineFilters[key]) return true;
-      return lineFilters[key].has(line);
+    // Canonical line order for consistent pill display
+    const lineOrder=['RD','OR','YL','GR','BL','SV'];
+    function sortLines(linesSet){
+      return lineOrder.filter(l=>linesSet.has(l));
     }
 
-    // --- Formatting ---
+    // ===== Formatting =====
     function formatDestName(name){ return name.replace(/\//g,' & '); }
     function formatTime(m){ return m==='ARR'||m==='BRD'?m:`${m} min`; }
     function isArriving(m){ return m==='ARR'||m==='BRD'; }
@@ -361,8 +392,8 @@
       return Object.entries(allStations).map(([c,n])=>({code:c,name:n})).sort((a,b)=>a.name.localeCompare(b.name));
     }
 
-    // --- Special trains ---
-    const specialTrains = new Set(['train','no passenger','no psngrs','lasttrain','last train']);
+    // ===== Special trains =====
+    const specialTrains=new Set(['train','no passenger','no psngrs','lasttrain','last train']);
     function isSpecialTrain(t){
       const dest=(t.Destination||'').toLowerCase().trim();
       const destName=(t.DestinationName||'').toLowerCase().trim();
@@ -382,10 +413,15 @@
       return 'Special';
     }
 
-    // --- Grouping ---
+    // ===== Direction grouping =====
+    // Use source station + Group to create unique direction keys across merged platforms
     function groupTrainsByDirection(trains){
       const groups={};
-      for(const t of trains){const g=t.Group||'?'; if(!groups[g]) groups[g]=[]; groups[g].push(t)}
+      for(const t of trains){
+        const key=(t._src||t.LocationCode||'?')+'-'+(t.Group||'?');
+        if(!groups[key]) groups[key]=[];
+        groups[key].push(t);
+      }
       return groups;
     }
     function getDirectionLabel(trains){
@@ -398,9 +434,31 @@
       return dests.length?'Toward '+dests.join(', '):'Trains';
     }
 
-    // --- Rendering ---
+    // ===== Alerts =====
+    function parseAlertLines(a){ return (a.LinesAffected||'').split(/;[\s]?/).filter(l=>l.trim()).map(l=>l.trim()); }
+
+    function getAllUserLines(){
+      const lines=new Set();
+      for(const g of getDisplayGroups()){
+        for(const l of getGroupLines(g.codes)) lines.add(l);
+      }
+      return lines;
+    }
+    function getRelevantAlerts(){
+      const userLines=getAllUserLines();
+      return railAlerts.filter(a=>parseAlertLines(a).some(l=>userLines.has(l)));
+    }
+    function groupHasAlert(codes){
+      const gLines=getGroupLines(codes);
+      if(gLines.size===0) return false;
+      return railAlerts.some(a=>parseAlertLines(a).some(l=>gLines.has(l)));
+    }
+
+    // ===== Rendering =====
+    const alertIconSvg='<svg style="width:14px;height:14px;flex-shrink:0;margin-left:0.3rem" fill="none" stroke="#dc2626" viewBox="0 0 24 24" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke-linejoin="round"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+
     function renderAlertsBanner(){
-      const relevant = getRelevantAlerts();
+      const relevant=getRelevantAlerts();
       if(!relevant.length) return '';
       let h=`<div class="alerts-banner"><div class="alerts-header"><svg style="width:14px;height:14px;flex-shrink:0" fill="none" stroke="#92400e" viewBox="0 0 24 24" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke-linejoin="round"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Service Alerts</div>`;
       for(const a of relevant){
@@ -414,78 +472,78 @@
       const arriving=isArriving(t.Min);
       const special=isSpecialTrain(t);
       const destDisplay=special?getSpecialLabel(t):(getLineName(t.Line)+' to '+getFullDestination(t));
-      return`<div class="train-item"><div class="train-left"><div class="line-dot"style="background-color:${special?'#a09a8e':getLineColor(t.Line)}"></div><div class="train-info"><div class="train-dest"style="${special?'color:#8a8477;font-style:italic':''}">${destDisplay}</div>${t.Car&&!special?`<div class="train-cars">${t.Car} cars</div>`:''}</div></div><div class="train-time${arriving?' train-time-arriving':''}">${formatTime(t.Min)}</div></div>`;
+      return`<div class="train-item"><div class="train-left"><div class="line-dot" style="background-color:${special?'#a09a8e':getLineColor(t.Line)}"></div><div class="train-info"><div class="train-dest" style="${special?'color:#8a8477;font-style:italic':''}">${destDisplay}</div>${t.Car&&!special?`<div class="train-cars">${t.Car} cars</div>`:''}</div></div><div class="train-time${arriving?' train-time-arriving':''}">${formatTime(t.Min)}</div></div>`;
     }
 
-    function renderStationCard(c){
-      const trains=predictions[c];
-      const isCollapsed=collapsedStations.has(c);
-      const stName=formatDestName(allStations[c]);
+    function renderDisplayGroup(group){
+      const gk=getGroupKey(group.codes);
+      const isCollapsed=collapsedStations.has(gk);
+      const stName=formatDestName(group.name);
+      const hasAlert=groupHasAlert(group.codes);
+      const allTrains=getGroupTrains(group.codes);
+      const availableLines=getGroupLines(group.codes);
+      ensureLineSelections(gk, availableLines);
+      const sel=lineSelections[gk]||new Set();
+      const sortedLines=sortLines(availableLines);
 
-      const hasAlert = stationHasAlert(c);
-      const alertIcon = hasAlert ? '<svg style="width:14px;height:14px;flex-shrink:0;margin-left:0.3rem" fill="none" stroke="#dc2626" viewBox="0 0 24 24" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke-linejoin="round"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>' : '';
+      // Filter trains by selected lines
+      const filteredTrains=allTrains.filter(t=>{
+        if(isSpecialTrain(t)) return true;
+        return sel.has(t.Line);
+      });
 
-      if(!trains||!trains.length){
-        return`<div class="card"><div class="station-header" onclick="toggleCollapse('${c}')"><h2 class="station-name">${stName}${alertIcon}</h2><span class="collapse-arrow${isCollapsed?' collapsed':''}">▾</span></div><div class="station-body${isCollapsed?' hidden':''}"><div class="empty-text">${loading?'Loading...':'No trains scheduled'}</div></div></div>`;
-      }
+      // Build header
+      let h=`<div class="card">`;
+      h+=`<div class="station-header" onclick="toggleCollapse('${gk}')">`;
+      h+=`<h2 class="station-name">${stName}${hasAlert?alertIconSvg:''}</h2>`;
+      h+=`<span class="collapse-arrow${isCollapsed?' collapsed':''}">▾</span></div>`;
 
-      const grouped=groupTrainsByDirection(trains);
-      const keys=Object.keys(grouped).sort();
-
-      let h=`<div class="card"><div class="station-header" onclick="toggleCollapse('${c}')"><h2 class="station-name">${stName}${alertIcon}</h2><span class="collapse-arrow${isCollapsed?' collapsed':''}">▾</span></div>`;
+      // Body
       h+=`<div class="station-body${isCollapsed?' hidden':''}">`;
 
-      keys.forEach((k,i)=>{
-        const dt=grouped[k];
-        const linesInGroup=[]; const seenLines=new Set();
-        for(const t of dt){
-          if(!isSpecialTrain(t)&&t.Line&&!seenLines.has(t.Line)){seenLines.add(t.Line);linesInGroup.push(t.Line)}
+      // Line filter pills (always visible when expanded)
+      if(sortedLines.length>0){
+        h+=`<div class="line-filters">`;
+        for(const line of sortedLines){
+          const active=sel.has(line);
+          const bg=active?getLineFilterBg(line):'transparent';
+          const border=active?getLineColor(line):'#d1cdc4';
+          const color=active?getLineColor(line):'#6b7264';
+          h+=`<button class="line-filter-btn" onclick="event.stopPropagation();toggleLineSelection('${gk}','${line}')" style="background:${bg};border-color:${border};color:${color}">${getLineName(line)}</button>`;
         }
-        const filterKey=getFilterKey(c,k);
-        const hasFilter=!!lineFilters[filterKey];
-        const filteredTrains=dt.filter(t=>{
-          if(isSpecialTrain(t)) return true;
-          return isLineVisible(c,k,t.Line);
-        });
-
-        h+=`<div class="direction-group">`;
-        h+=`<div class="direction-label"><span class="direction-arrow">▸</span> ${getDirectionLabel(dt)}</div>`;
-        if(linesInGroup.length>1){
-          h+=`<div class="line-filters">`;
-          for(const line of linesInGroup){
-            const active=hasFilter?lineFilters[filterKey].has(line):false;
-            const bg=active?getLineFilterBg(line):'transparent';
-            const border=active?getLineColor(line):'#d1cdc4';
-            const color=active?getLineColor(line):'#6b7264';
-            h+=`<button class="line-filter-btn" onclick="event.stopPropagation();toggleLineFilter('${c}','${k}','${line}')" style="background:${bg};border-color:${border};color:${color}">${getLineName(line)}</button>`;
-          }
-          h+=`</div>`;
-        }
-        h+=filteredTrains.map(renderTrainItem).join('');
         h+=`</div>`;
-        if(i<keys.length-1) h+=`<div class="direction-divider"></div>`;
-      });
+      }
+
+      if(!filteredTrains.length){
+        h+=`<div class="empty-text">${loading?'Loading...':'No trains scheduled'}</div>`;
+      } else {
+        const grouped=groupTrainsByDirection(filteredTrains);
+        const keys=Object.keys(grouped).sort();
+        keys.forEach((k,i)=>{
+          const dt=grouped[k];
+          h+=`<div class="direction-group">`;
+          h+=`<div class="direction-label"><span class="direction-arrow">▸</span> ${getDirectionLabel(dt)}</div>`;
+          h+=dt.map(renderTrainItem).join('');
+          h+=`</div>`;
+          if(i<keys.length-1) h+=`<div class="direction-divider"></div>`;
+        });
+      }
 
       h+=`</div></div>`;
       return h;
     }
 
-    // --- Main render with focus preservation ---
+    // ===== Main render with focus preservation =====
     function render(){
-      // Save input focus state before re-render
       const activeEl=document.activeElement;
       const hadFocus=activeEl&&activeEl.id==='stationInput';
       const cursorPos=hadFocus?activeEl.selectionStart:0;
 
       document.getElementById('app').innerHTML=showSettings?renderSettings():renderMain();
 
-      // Restore focus after re-render
       if(hadFocus){
         const inp=document.getElementById('stationInput');
-        if(inp){
-          inp.focus();
-          inp.setSelectionRange(cursorPos,cursorPos);
-        }
+        if(inp){ inp.focus(); inp.setSelectionRange(cursorPos,cursorPos); }
       }
       attachEventListeners();
     }
@@ -493,36 +551,35 @@
     function renderSettings(){
       const sb=getStationsByName();
       const f=stationInput?sb.filter(({name,code})=>name.toLowerCase().includes(stationInput.toLowerCase())||code.toLowerCase().includes(stationInput.toLowerCase())).slice(0,10):[];
-      return`<div class="app"><div class="container"><div class="card-white"><div class="settings-header"><h2 class="settings-title">Station Settings</h2><button class="btn-link" onclick="toggleSettings()">Done</button></div>${showPairSuggestion?`<div class="info-banner"><svg style="width:18px;height:18px;color:#2d6a4f;flex-shrink:0;margin-top:2px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><line x1="12" y1="16" x2="12" y2="12" stroke-width="2"/><line x1="12" y1="8" x2="12.01" y2="8" stroke-width="2"/></svg><div class="info-content"><p class="info-title">Multi-platform station detected!</p><p class="info-text">${allStations[showPairSuggestion]} has another platform. Add it for complete train predictions?</p><div class="info-buttons"><button class="btn-info" onclick="addStationPair('${showPairSuggestion}')">Add ${allStations[showPairSuggestion]}</button><button class="btn-info-secondary" onclick="clearPairSuggestion()">Skip</button></div></div></div>`:''}<div class="input-group"><label class="input-label">Search Station by Name</label><input type="text" class="input" id="stationInput" value="${stationInput}" placeholder="Type station name..."/></div>${stationInput?`<div><h3 class="input-label">Matching Stations</h3><div class="search-results">${f.map(({code,name})=>`<button class="search-item" onclick="addStation('${code}')"${stations.includes(code)?' disabled':''}><div class="search-item-name">${name}</div><div class="search-item-code">Code: ${code}</div></button>`).join('')}</div></div>`:''}${stations.length>0?`<div><h3 class="input-label">Your Stations (${stations.length})</h3>${stations.map(c=>`<div class="station-list-item"><div class="station-list-name">${allStations[c]}</div><button class="btn-remove" onclick="removeStation('${c}')">Remove</button></div>`).join('')}</div>`:!stationInput?'<div class="empty-settings"><p style="font-size:0.875rem">No stations added yet</p><p style="font-size:0.75rem;margin-top:0.25rem">Start typing to search for stations</p></div>':''}</div></div></div>`;
+      // For station list in settings, show merged display groups
+      const dg=getDisplayGroups();
+      return`<div class="app"><div class="container"><div class="card-white"><div class="settings-header"><h2 class="settings-title">Station Settings</h2><button class="btn-link" onclick="toggleSettings()">Done</button></div><div class="input-group"><label class="input-label">Search Station by Name</label><input type="text" class="input" id="stationInput" value="${stationInput}" placeholder="Type station name..."/></div>${stationInput?`<div><h3 class="input-label">Matching Stations</h3><div class="search-results">${f.map(({code,name})=>{
+        // If this station or its pair is already added, disable
+        const pair=pairedStations[code];
+        const alreadyAdded=stations.includes(code)||(pair&&stations.includes(pair));
+        return`<button class="search-item" onclick="addStation('${code}')"${alreadyAdded?' disabled':''}><div class="search-item-name">${name}</div><div class="search-item-code">Code: ${code}</div></button>`;
+      }).join('')}</div></div>`:''}${dg.length>0?`<div><h3 class="input-label">Your Stations (${dg.length})</h3>${dg.map(g=>`<div class="station-list-item"><div class="station-list-name">${formatDestName(g.name)}</div><button class="btn-remove" onclick="removeStation('${g.codes[0]}')">Remove</button></div>`).join('')}</div>`:!stationInput?'<div class="empty-settings"><p style="font-size:0.875rem">No stations added yet</p><p style="font-size:0.75rem;margin-top:0.25rem">Start typing to search for stations</p></div>':''}</div></div></div>`;
     }
 
     function renderMain(){
-      return`<div class="app"><div class="container"><div class="header"><div class="header-left"><svg style="width:28px;height:28px" viewBox="0 0 24 24" fill="none" stroke="#2d6a4f" stroke-width="1.6" stroke-linejoin="round"><polygon points="12,1.5 22.5,12 12,22.5 1.5,12"/><text x="12" y="16.2" text-anchor="middle" font-family="-apple-system,Helvetica,sans-serif" font-size="12" font-weight="800" fill="#2d6a4f" stroke="none">M</text></svg><h1 class="header-title">Metro Monitor</h1></div><div class="header-buttons"><button class="icon-btn" onclick="manualRefresh()"${loading?' disabled':''}><svg class="${loading?'spin':''}" style="width:20px;height:20px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 2v6h-6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 22v-6h6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button class="icon-btn" onclick="toggleSettings()" style="font-size:1.4rem;font-weight:300;line-height:1;padding:0.3rem 0.55rem">+</button></div></div>${lastUpdate?`<div class="last-update"><svg style="width:14px;height:14px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><polyline points="12 6 12 12 16 14" stroke-width="2"/></svg>Updated ${lastUpdate.toLocaleTimeString()}</div>`:''}${renderAlertsBanner()}${error?`<div class="alert"><svg style="width:18px;height:18px;color:#b91c1c;flex-shrink:0;margin-top:2px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><line x1="12" y1="8" x2="12" y2="12" stroke-width="2"/><line x1="12" y1="16" x2="12.01" y2="16" stroke-width="2"/></svg><div><p class="alert-title">Error</p><p class="alert-text">${error}</p></div></div>`:''}${!stations.length?'<div class="empty-state"><svg class="empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6"/></svg><p style="color:#2c2c2c;font-size:1.05rem;font-weight:600;margin-bottom:0.4rem">No stations configured</p><p style="color:#8a8477;margin-bottom:1rem;font-size:0.9rem">Tap + to add your favorite stations</p><button class="btn-primary" onclick="toggleSettings()">Add Stations</button></div>':stations.map(c=>renderStationCard(c)).join('')}</div></div>`;
+      const dg=getDisplayGroups();
+      return`<div class="app"><div class="container"><div class="header"><div class="header-left"><svg style="width:28px;height:28px" viewBox="0 0 24 24" fill="none" stroke="#2d6a4f" stroke-width="1.6" stroke-linejoin="round"><polygon points="12,1.5 22.5,12 12,22.5 1.5,12"/><text x="12" y="16.2" text-anchor="middle" font-family="-apple-system,Helvetica,sans-serif" font-size="12" font-weight="800" fill="#2d6a4f" stroke="none">M</text></svg><h1 class="header-title">Metro Monitor</h1></div><div class="header-buttons"><button class="icon-btn" onclick="manualRefresh()"${loading?' disabled':''}><svg class="${loading?'spin':''}" style="width:20px;height:20px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 2v6h-6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 22v-6h6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button class="icon-btn" onclick="toggleSettings()" style="font-size:1.4rem;font-weight:300;line-height:1;padding:0.3rem 0.55rem">+</button></div></div>${lastUpdate?`<div class="last-update"><svg style="width:14px;height:14px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><polyline points="12 6 12 12 16 14" stroke-width="2"/></svg>Updated ${lastUpdate.toLocaleTimeString()}</div>`:''}${renderAlertsBanner()}${error?`<div class="alert"><svg style="width:18px;height:18px;color:#b91c1c;flex-shrink:0;margin-top:2px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/><line x1="12" y1="8" x2="12" y2="12" stroke-width="2"/><line x1="12" y1="16" x2="12.01" y2="16" stroke-width="2"/></svg><div><p class="alert-title">Error</p><p class="alert-text">${error}</p></div></div>`:''}${!dg.length?'<div class="empty-state"><svg class="empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6"/></svg><p style="color:#2c2c2c;font-size:1.05rem;font-weight:600;margin-bottom:0.4rem">No stations configured</p><p style="color:#8a8477;margin-bottom:1rem;font-size:0.9rem">Tap + to add your favorite stations</p><button class="btn-primary" onclick="toggleSettings()">Add Stations</button></div>':dg.map(g=>renderDisplayGroup(g)).join('')}</div></div>`;
     }
 
     function attachEventListeners(){
       const inp=document.getElementById('stationInput');
-      if(inp){
-        inp.addEventListener('input', e=>{
-          stationInput=e.target.value;
-          render();
-        });
-      }
+      if(inp) inp.addEventListener('input', e=>{ stationInput=e.target.value; render(); });
     }
 
     function manualRefresh(){ fetchAll(); }
-    function toggleSettings(){ showSettings=!showSettings; showPairSuggestion=null; stationInput=''; render(); }
-    function clearPairSuggestion(){ showPairSuggestion=null; render(); }
+    function toggleSettings(){ showSettings=!showSettings; stationInput=''; render(); }
 
     window.toggleSettings=toggleSettings;
     window.manualRefresh=manualRefresh;
-    window.fetchPredictions=fetchPredictions;
     window.addStation=addStation;
-    window.addStationPair=addStationPair;
     window.removeStation=removeStation;
-    window.clearPairSuggestion=clearPairSuggestion;
-    window.toggleLineFilter=toggleLineFilter;
     window.toggleCollapse=toggleCollapse;
+    window.toggleLineSelection=toggleLineSelection;
     init();
   </script>
 </body>
