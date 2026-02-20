@@ -66,8 +66,8 @@
     }
     .station-name { font-size: 1.05rem; font-weight: 700; color: #2d6a4f; display: flex; align-items: center; }
     .collapse-arrow {
-      font-size: 0.7rem; color: #a09a8e; transition: transform 0.2s ease;
-      padding: 0.2rem 0.1rem;
+      font-size: 1.1rem; color: #6b7264; transition: transform 0.2s ease;
+      padding: 0.2rem 0.3rem;
     }
     .collapse-arrow.collapsed { transform: rotate(-90deg); }
     .station-body { margin-top: 0.4rem; }
@@ -265,6 +265,7 @@
       const sel=lineSelections[groupKey];
       if(sel.has(line)) sel.delete(line);
       else sel.add(line);
+      saveLineSelections();
       render();
     }
 
@@ -393,24 +394,32 @@
     }
 
     // ===== Special trains =====
-    const specialTrains=new Set(['train','no passenger','no psngrs','lasttrain','last train']);
-    function isSpecialTrain(t){
+    const noServiceTrains=new Set(['train','no passenger','no psngrs']);
+    const lastTrainLabels=new Set(['lasttrain','last train']);
+
+    function isNoServiceTrain(t){
       const dest=(t.Destination||'').toLowerCase().trim();
       const destName=(t.DestinationName||'').toLowerCase().trim();
-      return specialTrains.has(dest)||specialTrains.has(destName)||dest===''||t.DestinationCode===null||t.DestinationCode==='';
+      return noServiceTrains.has(dest)||noServiceTrains.has(destName)||dest===''||(!t.Line||t.Line.length!==2);
     }
+    function isLastTrain(t){
+      const dest=(t.Destination||'').toLowerCase().trim();
+      const destName=(t.DestinationName||'').toLowerCase().trim();
+      return lastTrainLabels.has(dest)||lastTrainLabels.has(destName);
+    }
+    function isSpecialTrain(t){ return isNoServiceTrain(t)||isLastTrain(t); }
+
     function getFullDestination(t){
       let name;
       if(t.DestinationCode&&allStations[t.DestinationCode]) name=allStations[t.DestinationCode];
-      else if(t.DestinationName&&t.DestinationName.length>2) name=t.DestinationName;
-      else name=t.Destination||'Unknown';
-      return formatDestName(name);
+      else if(t.DestinationName&&t.DestinationName.length>2&&!lastTrainLabels.has(t.DestinationName.toLowerCase().trim())) name=t.DestinationName;
+      else name=null;
+      return name?formatDestName(name):null;
     }
-    function getSpecialLabel(t){
-      const dest=(t.Destination||'').toLowerCase().trim();
-      if(dest==='lasttrain'||dest==='last train') return 'Last Train';
-      if(dest==='no psngrs'||(t.DestinationName||'').toLowerCase()==='no passenger') return 'Not In Service';
-      return 'Special';
+    function getLastTrainDest(t){
+      // Try to get real destination from DestinationCode even though Destination says "lasttrain"
+      if(t.DestinationCode&&allStations[t.DestinationCode]) return formatDestName(allStations[t.DestinationCode]);
+      return null;
     }
 
     // ===== Direction grouping =====
@@ -427,8 +436,10 @@
     function getDirectionLabel(trains){
       const dests=[],seen=new Set();
       for(const t of trains){
-        if(isSpecialTrain(t)) continue;
-        const name=getFullDestination(t);
+        if(isNoServiceTrain(t)) continue;
+        let name;
+        if(isLastTrain(t)) name=getLastTrainDest(t);
+        else name=getFullDestination(t);
         if(name&&!seen.has(name)){seen.add(name);dests.push(name)}
       }
       return dests.length?'Toward '+dests.join(', '):'Trains';
@@ -470,9 +481,32 @@
 
     function renderTrainItem(t){
       const arriving=isArriving(t.Min);
-      const special=isSpecialTrain(t);
-      const destDisplay=special?getSpecialLabel(t):(getLineName(t.Line)+' to '+getFullDestination(t));
-      return`<div class="train-item"><div class="train-left"><div class="line-dot" style="background-color:${special?'#a09a8e':getLineColor(t.Line)}"></div><div class="train-info"><div class="train-dest" style="${special?'color:#8a8477;font-style:italic':''}">${destDisplay}</div>${t.Car&&!special?`<div class="train-cars">${t.Car} cars</div>`:''}</div></div><div class="train-time${arriving?' train-time-arriving':''}">${formatTime(t.Min)}</div></div>`;
+      const lastTrain=isLastTrain(t);
+      const noService=isNoServiceTrain(t);
+
+      let destDisplay, dotColor, destStyle='';
+
+      if(noService){
+        destDisplay='Not In Service';
+        dotColor='#a09a8e';
+        destStyle='color:#8a8477;font-style:italic';
+      } else if(lastTrain){
+        const dest=getLastTrainDest(t);
+        const lineName=t.Line?getLineName(t.Line):'';
+        if(dest&&lineName){
+          destDisplay=`${lineName} to ${dest} – <em style="font-weight:400">Last Train</em>`;
+        } else if(lineName){
+          destDisplay=`${lineName} – <em style="font-weight:400">Last Train</em>`;
+        } else {
+          destDisplay='<em>Last Train</em>';
+        }
+        dotColor=t.Line?getLineColor(t.Line):'#a09a8e';
+      } else {
+        destDisplay=getLineName(t.Line)+' to '+(getFullDestination(t)||'Unknown');
+        dotColor=getLineColor(t.Line);
+      }
+
+      return`<div class="train-item"><div class="train-left"><div class="line-dot" style="background-color:${dotColor}"></div><div class="train-info"><div class="train-dest" style="${destStyle}">${destDisplay}</div>${t.Car&&!noService?`<div class="train-cars">${t.Car} cars</div>`:''}</div></div><div class="train-time${arriving?' train-time-arriving':''}">${formatTime(t.Min)}</div></div>`;
     }
 
     function renderDisplayGroup(group){
@@ -488,7 +522,8 @@
 
       // Filter trains by selected lines
       const filteredTrains=allTrains.filter(t=>{
-        if(isSpecialTrain(t)) return true;
+        if(isNoServiceTrain(t)) return true;  // always show no-service
+        if(isLastTrain(t)) return t.Line?sel.has(t.Line):true;  // last trains filter by line
         return sel.has(t.Line);
       });
 
