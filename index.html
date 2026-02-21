@@ -121,22 +121,20 @@
     .modal-overlay {
       position: fixed; top: 0; left: 0; right: 0; bottom: 0;
       background: rgba(0,0,0,0.35); z-index: 100;
-      display: flex; align-items: flex-end; justify-content: center;
+      display: flex; align-items: center; justify-content: center;
+      padding: 1.5rem;
       animation: fadeIn 0.15s ease;
     }
     .modal-sheet {
-      background: white; border-radius: 1rem 1rem 0 0;
-      width: 100%; max-width: 48rem; max-height: 85vh;
-      padding: 1.25rem 1.25rem 2rem; overflow-y: auto;
-      box-shadow: 0 -4px 24px rgba(0,0,0,0.12);
-      animation: slideUp 0.2s ease;
-    }
-    .modal-handle {
-      width: 2.5rem; height: 0.25rem; background: #d1cdc4;
-      border-radius: 999px; margin: 0 auto 1rem;
+      background: #f4f1eb; border: 2px solid #2d6a4f;
+      border-radius: 0.85rem;
+      width: 100%; max-width: 26rem; max-height: 75vh;
+      padding: 1.25rem; overflow-y: auto;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+      animation: popIn 0.15s ease;
     }
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-    @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    @keyframes popIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
 
     .card-white {
       background: white; border: 1px solid #ddd8cf;
@@ -632,7 +630,7 @@
       const sb=getStationsByName();
       const f=stationInput?sb.filter(({name,code})=>name.toLowerCase().includes(stationInput.toLowerCase())||code.toLowerCase().includes(stationInput.toLowerCase())).slice(0,10):[];
       const dg=getDisplayGroups();
-      return`<div class="modal-overlay" onclick="onOverlayClick(event)"><div class="modal-sheet" onclick="event.stopPropagation()"><div class="modal-handle"></div><div class="settings-header"><h2 class="settings-title">Add Stations</h2><button class="btn-link" onclick="toggleSettings()">Done</button></div><div class="input-group"><label class="input-label">Search Station by Name</label><input type="text" class="input" id="stationInput" value="${stationInput}" placeholder="Type station name..."/></div>${stationInput?`<div><h3 class="input-label">Matching Stations</h3><div class="search-results">${f.map(({code,name})=>{
+      return`<div class="modal-overlay" onclick="onOverlayClick(event)"><div class="modal-sheet" onclick="event.stopPropagation()"><div class="settings-header"><h2 class="settings-title">Add Stations</h2><button class="btn-link" onclick="toggleSettings()">Done</button></div><div class="input-group"><label class="input-label">Search Station by Name</label><input type="text" class="input" id="stationInput" value="${stationInput}" placeholder="Type station name..."/></div>${stationInput?`<div><h3 class="input-label">Matching Stations</h3><div class="search-results">${f.map(({code,name})=>{
         const pair=pairedStations[code];
         const alreadyAdded=stations.includes(code)||(pair&&stations.includes(pair));
         return`<button class="search-item" onclick="addStation('${code}')"${alreadyAdded?' disabled':''}><div class="search-item-name">${name}</div><div class="search-item-code">Code: ${code}</div></button>`;
