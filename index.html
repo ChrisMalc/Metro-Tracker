@@ -118,6 +118,26 @@
     }
     .btn-primary:hover { background: #245a42; }
 
+    .modal-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.35); z-index: 100;
+      display: flex; align-items: flex-end; justify-content: center;
+      animation: fadeIn 0.15s ease;
+    }
+    .modal-sheet {
+      background: white; border-radius: 1rem 1rem 0 0;
+      width: 100%; max-width: 48rem; max-height: 85vh;
+      padding: 1.25rem 1.25rem 2rem; overflow-y: auto;
+      box-shadow: 0 -4px 24px rgba(0,0,0,0.12);
+      animation: slideUp 0.2s ease;
+    }
+    .modal-handle {
+      width: 2.5rem; height: 0.25rem; background: #d1cdc4;
+      border-radius: 999px; margin: 0 auto 1rem;
+    }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
     .card-white {
       background: white; border: 1px solid #ddd8cf;
       border-radius: 0.85rem; box-shadow: 0 2px 8px rgba(0,0,0,0.06); padding: 1.5rem;
@@ -194,6 +214,7 @@
     let stations=[], predictions={}, loading=false, error='', showSettings=false, stationInput='', lastUpdate=null, refreshInterval=null;
     let collapsedStations = new Set();  // keyed by groupKey
     let lineSelections = {};            // groupKey -> Set of selected lines
+    let knownGroupLines = {};           // groupKey -> Set of all lines ever seen (prevents re-adding deselected)
     let railAlerts = [];
 
     // ===== Display Groups: merge paired stations into single cards =====
@@ -247,13 +268,16 @@
 
     // Ensure line selections exist for a group, defaulting all to selected
     function ensureLineSelections(groupKey, availableLines){
+      if(!knownGroupLines[groupKey]) knownGroupLines[groupKey]=new Set();
       if(!lineSelections[groupKey]){
+        // Brand new group: select all lines
         lineSelections[groupKey] = new Set(availableLines);
+        for(const l of availableLines) knownGroupLines[groupKey].add(l);
       } else {
-        // Add any new lines as selected
+        // Existing group: only add lines we've NEVER seen before
         for(const l of availableLines){
-          if(!lineSelections[groupKey].has(l)){
-            // Only auto-add if this is a genuinely new line
+          if(!knownGroupLines[groupKey].has(l)){
+            knownGroupLines[groupKey].add(l);
             lineSelections[groupKey].add(l);
           }
         }
@@ -280,6 +304,11 @@
         const obj=JSON.parse(ls);
         for(const k in obj) lineSelections[k]=new Set(obj[k]);
       }catch(e){}}
+      const kl=localStorage.getItem('metroKnownLines');
+      if(kl){try{
+        const obj=JSON.parse(kl);
+        for(const k in obj) knownGroupLines[k]=new Set(obj[k]);
+      }catch(e){}}
       render();
       if(stations.length>0){fetchAll(); refreshInterval=setInterval(fetchAll,30000)}
     }
@@ -294,6 +323,9 @@
       const obj={};
       for(const k in lineSelections) obj[k]=[...lineSelections[k]];
       localStorage.setItem('metroLineSelections',JSON.stringify(obj));
+      const kObj={};
+      for(const k in knownGroupLines) kObj[k]=[...knownGroupLines[k]];
+      localStorage.setItem('metroKnownLines',JSON.stringify(kObj));
     }
 
     // ===== Data fetching =====
@@ -448,21 +480,33 @@
     // ===== Alerts =====
     function parseAlertLines(a){ return (a.LinesAffected||'').split(/;[\s]?/).filter(l=>l.trim()).map(l=>l.trim()); }
 
-    function getAllUserLines(){
+    // Fix mojibake from WMATA API (curly quotes encoded as Windows-1252 misread as UTF-8)
+    function sanitizeText(s){
+      return s
+        .replace(/â€™/g,"'").replace(/â€œ/g,'"').replace(/â€\u009D/g,'"')
+        .replace(/â€"/g,'—').replace(/â€"/g,'–')
+        .replace(/\u2019/g,"'").replace(/\u201C/g,'"').replace(/\u201D/g,'"')
+        .replace(/\u2013/g,'–').replace(/\u2014/g,'—');
+    }
+
+    function getAllActiveLines(){
       const lines=new Set();
       for(const g of getDisplayGroups()){
-        for(const l of getGroupLines(g.codes)) lines.add(l);
+        const gk=getGroupKey(g.codes);
+        const sel=lineSelections[gk];
+        if(sel){ for(const l of sel) lines.add(l); }
       }
       return lines;
     }
     function getRelevantAlerts(){
-      const userLines=getAllUserLines();
-      return railAlerts.filter(a=>parseAlertLines(a).some(l=>userLines.has(l)));
+      const activeLines=getAllActiveLines();
+      return railAlerts.filter(a=>parseAlertLines(a).some(l=>activeLines.has(l)));
     }
     function groupHasAlert(codes){
-      const gLines=getGroupLines(codes);
-      if(gLines.size===0) return false;
-      return railAlerts.some(a=>parseAlertLines(a).some(l=>gLines.has(l)));
+      const gk=getGroupKey(codes);
+      const sel=lineSelections[gk];
+      if(!sel||sel.size===0) return false;
+      return railAlerts.some(a=>parseAlertLines(a).some(l=>sel.has(l)));
     }
 
     // ===== Rendering =====
@@ -474,7 +518,7 @@
       let h=`<div class="alerts-banner"><div class="alerts-header"><svg style="width:14px;height:14px;flex-shrink:0" fill="none" stroke="#92400e" viewBox="0 0 24 24" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke-linejoin="round"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Service Alerts</div>`;
       for(const a of relevant){
         const lines=parseAlertLines(a).map(l=>getLineName(l)).join(', ');
-        h+=`<div class="alert-item">${lines?`<span class="alert-lines">${lines}:</span> `:''}${a.Description}</div>`;
+        h+=`<div class="alert-item">${lines?`<span class="alert-lines">${lines}:</span> `:''}${sanitizeText(a.Description)}</div>`;
       }
       return h+'</div>';
     }
@@ -573,26 +617,30 @@
       const hadFocus=activeEl&&activeEl.id==='stationInput';
       const cursorPos=hadFocus?activeEl.selectionStart:0;
 
-      document.getElementById('app').innerHTML=showSettings?renderSettings():renderMain();
+      let html=renderMain();
+      if(showSettings) html+=renderSettingsModal();
+      document.getElementById('app').innerHTML=html;
 
-      if(hadFocus){
+      if(hadFocus||showSettings){
         const inp=document.getElementById('stationInput');
-        if(inp){ inp.focus(); inp.setSelectionRange(cursorPos,cursorPos); }
+        if(inp&&(hadFocus||showSettings)){ inp.focus(); if(hadFocus) inp.setSelectionRange(cursorPos,cursorPos); }
       }
       attachEventListeners();
     }
 
-    function renderSettings(){
+    function renderSettingsModal(){
       const sb=getStationsByName();
       const f=stationInput?sb.filter(({name,code})=>name.toLowerCase().includes(stationInput.toLowerCase())||code.toLowerCase().includes(stationInput.toLowerCase())).slice(0,10):[];
-      // For station list in settings, show merged display groups
       const dg=getDisplayGroups();
-      return`<div class="app"><div class="container"><div class="card-white"><div class="settings-header"><h2 class="settings-title">Station Settings</h2><button class="btn-link" onclick="toggleSettings()">Done</button></div><div class="input-group"><label class="input-label">Search Station by Name</label><input type="text" class="input" id="stationInput" value="${stationInput}" placeholder="Type station name..."/></div>${stationInput?`<div><h3 class="input-label">Matching Stations</h3><div class="search-results">${f.map(({code,name})=>{
-        // If this station or its pair is already added, disable
+      return`<div class="modal-overlay" onclick="onOverlayClick(event)"><div class="modal-sheet" onclick="event.stopPropagation()"><div class="modal-handle"></div><div class="settings-header"><h2 class="settings-title">Add Stations</h2><button class="btn-link" onclick="toggleSettings()">Done</button></div><div class="input-group"><label class="input-label">Search Station by Name</label><input type="text" class="input" id="stationInput" value="${stationInput}" placeholder="Type station name..."/></div>${stationInput?`<div><h3 class="input-label">Matching Stations</h3><div class="search-results">${f.map(({code,name})=>{
         const pair=pairedStations[code];
         const alreadyAdded=stations.includes(code)||(pair&&stations.includes(pair));
         return`<button class="search-item" onclick="addStation('${code}')"${alreadyAdded?' disabled':''}><div class="search-item-name">${name}</div><div class="search-item-code">Code: ${code}</div></button>`;
-      }).join('')}</div></div>`:''}${dg.length>0?`<div><h3 class="input-label">Your Stations (${dg.length})</h3>${dg.map(g=>`<div class="station-list-item"><div class="station-list-name">${formatDestName(g.name)}</div><button class="btn-remove" onclick="removeStation('${g.codes[0]}')">Remove</button></div>`).join('')}</div>`:!stationInput?'<div class="empty-settings"><p style="font-size:0.875rem">No stations added yet</p><p style="font-size:0.75rem;margin-top:0.25rem">Start typing to search for stations</p></div>':''}</div></div></div>`;
+      }).join('')}</div></div>`:''}${dg.length>0?`<div><h3 class="input-label">Your Stations (${dg.length})</h3>${dg.map(g=>`<div class="station-list-item"><div class="station-list-name">${formatDestName(g.name)}</div><button class="btn-remove" onclick="removeStation('${g.codes[0]}')">Remove</button></div>`).join('')}</div>`:!stationInput?'<div class="empty-settings"><p style="font-size:0.875rem">No stations added yet</p><p style="font-size:0.75rem;margin-top:0.25rem">Start typing to search for stations</p></div>':''}</div></div>`;
+    }
+
+    function onOverlayClick(e){
+      if(e.target.classList.contains('modal-overlay')) toggleSettings();
     }
 
     function renderMain(){
@@ -614,6 +662,7 @@
     window.removeStation=removeStation;
     window.toggleCollapse=toggleCollapse;
     window.toggleLineSelection=toggleLineSelection;
+    window.onOverlayClick=onOverlayClick;
     init();
   </script>
 </body>
